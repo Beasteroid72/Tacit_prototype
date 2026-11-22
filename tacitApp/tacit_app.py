@@ -563,10 +563,10 @@ class TacitApp:
                 self._show_leave_bubble(None)
         elif corr and stage == "Suggest":
             conf = self.memory.confidence(word, corr)
-            action = self.memory.action(word, corr)
-            if action == "Ask" and conf >= CONF_ASK_MIN:
-                # Ask bubble in the editor itself (SECTION 8)
-                self._show_ask_bubble(word, corr, conf)
+            # During the Suggest stage, offer the user a choice on every
+            # recognized correction: "Yes, fix it" applies it, "Keep mine"
+            # declines it (ask bubble, SECTION 8).
+            self._show_ask_bubble(word, corr, conf)
         elif corr and stage == "Observe":
             # Very faint marker + tiny bubble, nothing changes (SECTION 5/8)
             self._mark_word(*rng, tag=TAG_OBSERVE)
