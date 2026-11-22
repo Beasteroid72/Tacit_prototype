@@ -1,4 +1,4 @@
-"""Candidate generation engine: live Ollama correction, pyspellchecker, built-in dictionary."""
+"""Engine: the local Ollama LLM is the detector for every word; pyspellchecker and the built-in dictionary are fallbacks when Ollama is unavailable or times out.  Learning/undo behaviour is in tacit_memory.py; this module only proposes corrections."""
 
 import re
 
@@ -16,7 +16,7 @@ except Exception:
 
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_MODEL = "llama3.2:3b"
-OLLAMA_TIMEOUT_SEC = 3.0
+OLLAMA_TIMEOUT_SEC = 2.0   # short timeout so typing never lags
 
 BUILTIN_CORRECTIONS = {
     "teh": "the",
@@ -35,7 +35,20 @@ BUILTIN_CORRECTIONS = {
 _cache = {}
 
 
+def _should_check(word):
+    """Skip very short words, numbers and capitalised names."""
+    if len(word) < 3:
+        return False
+    if word.isdigit():
+        return False
+    if word[:1].isupper():
+        return False
+    return True
+
+
 def try_ollama(word, context):
+    """Ask the local LLM: is `word` misspelled in context?  Returns the raw
+    reply text, or None when Ollama is unavailable or times out."""
     if requests is None:
         return None
     try:
@@ -44,13 +57,19 @@ def try_ollama(word, context):
             json={
                 "model": OLLAMA_MODEL,
                 "stream": False,
-                "prompt": f"The user typed the word '{word}' in this sentence:\n{context}\nIf the word is spelled correctly, reply with exactly the same word. Otherwise reply with only the correct spelling.",
+                "prompt": (
+                    f"The user typed the word '{word}' in this sentence:\n"
+                    f"{context}\n"
+                    f"Is the word '{word}' misspelled in this context? "
+                    f"If yes, reply with only the single best correction. "
+                    f"If no, reply with OK."
+                ),
             },
             timeout=OLLAMA_TIMEOUT_SEC,
         )
         if r.ok:
             resp = r.json().get("response", "").strip()
-            if resp and len(resp) <= 60:
+            if resp:
                 return resp
     except Exception:
         pass
@@ -58,12 +77,13 @@ def try_ollama(word, context):
 
 
 def _parse_correction(resp, word):
-    # Extract the proposed correction from an LLM reply: prefer the first
-    # double-quoted token (models often add text around the answer), else the
-    # stripped reply itself. Returns None when it equals the typed word or is
-    # not a plausible single word.
+    # Extract the proposed correction from an LLM reply: take the first
+    # quoted token (models often add text around the answer), else the reply
+    # itself. Returns None when it equals the typed word or is not a plausible
+    # single word. An "OK" reply gives None (not a mistake).
     m = re.findall(r'"([^"]+)"', resp)
     cand = m[0] if m else resp.strip()
+    cand = cand.strip().strip("'").strip()
     if not cand or cand.lower() == word.lower():
         return None
     if re.fullmatch(r"[A-Za-z][A-Za-z_\-]*[A-Za-z]?", cand):
@@ -72,43 +92,50 @@ def _parse_correction(resp, word):
 
 
 def engine_check(word, context):
-    """Return (correction_or_None, engine_name_or_None)."""
-    if word in _cache:
-        return _cache[word]
+    """Return (correction_or_None, engine_name_or_None) for a completed word.
+
+    The LLM is the detector for every word.  If Ollama is unavailable or
+    times out, pyspellchecker and the built-in dictionary act as fallbacks;
+    `engine_name` says which one was used so the UI can show it.
+    """
+    key = (word, context)
+    if key in _cache:
+        return _cache[key]
 
     result = None
-    llama_ok = False
+    engine_name = None
 
-    # 1) Ollama (local LLM), primary
-    if requests is not None:
-        corr = try_ollama(word, context)
-        if corr:
-            llama_ok = True
-            cand = _parse_correction(corr, word)
-            if cand:
-                result = (cand, "Ollama")
+    if _should_check(word):
+        # 1) Ollama (local LLM), primary -- asked for every word
+        if requests is not None:
+            resp = try_ollama(word, context)
+            if resp is not None:
+                engine_name = "Ollama"
+                corr = _parse_correction(resp, word)
+                if corr:
+                    result = (corr, "Ollama")
 
-    # 2) pyspellchecker
-    if result is None and spell is not None:
-        try:
-            in_dict = spell.word(word) if hasattr(spell, "word") else not spell.known([word])
-        except Exception:
-            in_dict = True
-        if not in_dict:
-            sugg = spell.correction(word)
-            if sugg and sugg != word:
-                result = (sugg, "pyspellchecker")
+        # 2) pyspellchecker -- fallback when Ollama is unavailable/times out
+        if result is None and spell is not None:
+            try:
+                in_dict = spell.word(word) if hasattr(spell, "word") else not spell.known([word])
+            except Exception:
+                in_dict = True
+            if not in_dict:
+                sugg = spell.correction(word)
+                if sugg and sugg != word:
+                    result = (sugg, "pyspellchecker")
 
-    # 3) built-in table of common mistakes
+        # 3) built-in table of common mistakes -- fallback when Ollama is unavailable/times out
+        if result is None:
+            corr = BUILTIN_CORRECTIONS.get(word.lower())
+            if corr and corr != word.lower():
+                result = (corr, "built-in dictionary")
+
     if result is None:
-        corr = BUILTIN_CORRECTIONS.get(word.lower())
-        if corr and corr != word.lower():
-            result = (corr, "built-in dictionary")
+        result = (None, engine_name)
 
-    if result is None:
-        result = (None, "Ollama" if llama_ok else None)
-
-    _cache[word] = result
+    _cache[key] = result
     return result
 
 
