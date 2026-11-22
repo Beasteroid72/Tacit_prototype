@@ -20,4 +20,4 @@ A simulated typing assistant that learns from your typing mistakes.
   `http://localhost:11434` (see `OLLAMA_URL` in `tacit_engine.py`).
 - `pip install requests` and `pip install pyspellchecker` are optional
   (recommended); without them the app uses the built-in dictionary.
-- Learning data is stored in `taco_memory.json` (same folder).
+- Learning data is stored in `tacit_memory.json` (same folder).
