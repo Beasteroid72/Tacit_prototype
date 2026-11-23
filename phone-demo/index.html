@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tacit Keyboard Demo</title>
+<style>
+  :root {
+    --ink: #171B26; --ink2: #262C3D; --mist: #F2F4F7; --line: #DDE1E7;
+    --green: #2F8F55; --amber: #D97F00; --grey: #7C838F; --indigo: #4655B8; --red: #B5473A;
+    --bubble-me: #4655B8; --bubble-them: #E9ECF1;
+    --kb-bg: #D3D7DE; --key: #FFFFFF; --key-alt: #AEB4BF; --key-ink: #171B26;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #E8EBF0; color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center; gap: 36px;
+    padding: 16px; overflow: hidden;
+  }
+
+  /* ---------------- Phone ---------------- */
+  .phone {
+    width: 380px; height: min(800px, calc(100vh - 32px)); flex: 0 0 auto;
+    background: #0E1118; border-radius: 48px; padding: 12px;
+    box-shadow: 0 30px 60px rgba(23,27,38,.28), inset 0 0 0 2px #2a2f3b;
+  }
+  .screen {
+    position: relative; width: 100%; height: 100%; border-radius: 38px; overflow: hidden;
+    background: #fff; display: flex; flex-direction: column;
+  }
+  .statusbar {
+    height: 40px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    padding: 4px 26px 0; font-size: 14px; font-weight: 600;
+  }
+  .notch { width: 110px; height: 28px; background: #0E1118; border-radius: 16px; }
+  .chat-head {
+    display: flex; align-items: center; gap: 10px; padding: 8px 14px 10px;
+    border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--green); color: #fff;
+    display: grid; place-items: center; font-weight: 700; }
+  .chat-head .name { font-weight: 700; font-size: 16px; }
+  .chat-head .sub { font-size: 12px; color: var(--grey); }
+  .messages { flex: 1 1 auto; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .msg { max-width: 76%; padding: 8px 12px; border-radius: 18px; font-size: 15px; line-height: 1.3; word-wrap: break-word; }
+  .msg.them { background: var(--bubble-them); align-self: flex-start; border-bottom-left-radius: 6px; }
+  .msg.me { background: var(--bubble-me); color: #fff; align-self: flex-end; border-bottom-right-radius: 6px; }
+  .composer { display: flex; align-items: flex-end; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); flex: 0 0 auto; }
+  .draft {
+    flex: 1; min-height: 38px; max-height: 92px; overflow-y: auto; border: 1px solid var(--line); border-radius: 19px;
+    padding: 8px 14px; font-size: 15px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+  }
+  .draft .ph { color: #A3A9B3; }
+  .caret { display: inline-block; width: 2px; height: 1.1em; background: var(--indigo); vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--indigo); color: #fff; font-size: 18px; cursor: pointer; }
+  .w-fixed { background: rgba(47,143,85,.18); border-radius: 4px; box-shadow: 0 2px 0 var(--green); }
+  .w-ask { border-bottom: 2px dotted var(--amber); }
+  .w-leave { background: rgba(124,131,143,.18); border-radius: 4px; }
+  .w-observe { border-bottom: 2px dotted #B8BEC8; }
+  .w-std { background: rgba(181,71,58,.15); border-radius: 4px; box-shadow: 0 2px 0 var(--red); }
+  .w-editing { background: rgba(70,85,184,.12); border-radius: 4px; box-shadow: 0 2px 0 var(--indigo); }
+  .draft { cursor: text; }
+
+  /* ---------------- Keyboard ---------------- */
+  .kb { background: var(--kb-bg); flex: 0 0 auto; padding: 0 4px 18px; user-select: none; }
+  .strip {
+    height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 6px; font-size: 14px;
+    border-bottom: 1px solid rgba(0,0,0,.06);
+  }
+  .strip .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+  .strip .label { font-size: 12px; color: #4C5260; white-space: nowrap; }
+  .strip .grow { flex: 1; display: flex; gap: 6px; justify-content: center; align-items: center; min-width: 0; overflow: hidden; }
+  .chip { border: 0; background: rgba(255,255,255,.75); border-radius: 14px; padding: 5px 11px; font-size: 14px; cursor: pointer; white-space: nowrap; color: var(--ink); }
+  .chip.primary { background: var(--amber); color: #fff; font-weight: 700; }
+  .chip.undo { background: var(--ink2); color: #fff; }
+  .chip:hover { filter: brightness(.95); }
+  .hint { font-size: 12.5px; color: #3D4350; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row { display: flex; justify-content: center; gap: 5px; margin-top: 9px; }
+  .key {
+    height: 42px; min-width: 31px; flex: 1 1 0; max-width: 34px; border: 0; border-radius: 6px; background: var(--key);
+    box-shadow: 0 1px 0 rgba(0,0,0,.3); font-size: 19px; color: var(--key-ink); cursor: pointer; padding: 0;
+    font-family: inherit;
+  }
+  .key.alt { background: var(--key-alt); font-size: 15px; max-width: 46px; flex-basis: 46px; }
+  .key.wide { max-width: none; flex: 5 1 0; font-size: 13px; color: #6B717D; }
+  .key.send-key { background: var(--indigo); color: #fff; max-width: 76px; flex-basis: 76px; font-size: 15px; }
+  .key.on { background: #fff; color: var(--indigo); }
+  .key:active, .key.pressed { background: #B9BFC9; }
+  .row.r2 { padding: 0 16px; }
+
+  /* picker sheet */
+  .sheet-backdrop { position: absolute; inset: 0; background: rgba(14,17,24,.35); display: none; z-index: 5; }
+  .sheet {
+    position: absolute; left: 10px; right: 10px; bottom: 16px; background: #fff; border-radius: 22px; padding: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  }
+  .sheet h3 { margin: 2px 4px 10px; font-size: 16px; }
+  .opt { display: flex; gap: 12px; align-items: center; padding: 12px 8px; border-radius: 14px; cursor: pointer; }
+  .opt:hover { background: var(--mist); }
+  .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #AEB4BF; flex: 0 0 auto; display: grid; place-items: center; }
+  .radio.sel { border-color: var(--indigo); }
+  .radio.sel::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--indigo); }
+  .opt .t { font-weight: 700; font-size: 15px; }
+  .opt .d { font-size: 12.5px; color: var(--grey); margin-top: 2px; }
+  .sheet .manage { font-size: 13px; color: var(--grey); padding: 10px 8px 2px; border-top: 1px solid var(--line); margin-top: 6px; }
+  .toast {
+    position: absolute; left: 50%; top: 104px; transform: translateX(-50%); background: var(--ink); color: #fff;
+    padding: 8px 14px; border-radius: 16px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 6; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ---------------- Panel ---------------- */
+  .panel {
+    width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; flex: 0 1 auto;
+    background: #fff; border-radius: 22px; padding: 22px; box-shadow: 0 10px 30px rgba(23,27,38,.08);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .dots { display: flex; gap: 5px; }
+  .brand .dots span { width: 11px; height: 11px; border-radius: 50%; }
+  .brand h1 { font-family: Cambria, Georgia, serif; font-size: 26px; margin: 0; }
+  .tag { font-size: 13px; color: var(--grey); margin: 4px 0 16px; }
+  .kbname { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: var(--mist); }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .card { background: var(--mist); border-radius: 14px; padding: 12px; }
+  .card .k { font-size: 11.5px; color: var(--grey); text-transform: uppercase; letter-spacing: .04em; }
+  .card .v { font-size: 22px; font-weight: 800; margin-top: 4px; }
+  .card .s { font-size: 12px; color: var(--grey); margin-top: 2px; }
+  .meter { height: 8px; background: #DDE1E7; border-radius: 4px; overflow: hidden; margin-top: 8px; position: relative; }
+  .meter > div { height: 100%; width: 0; transition: width .35s, background .35s; }
+  .meter .tick { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(23,27,38,.45); }
+  .stages { display: flex; gap: 4px; margin-top: 8px; }
+  .stages span { flex: 1; height: 6px; border-radius: 3px; background: #DDE1E7; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--grey); margin: 16px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 700; color: #4C5260; padding: 6px 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+  td { padding: 6px; border-bottom: 1px solid #EEF0F3; }
+  td.num { text-align: center; font-variant-numeric: tabular-nums; }
+  tr.hot td { background: #FFF6E5; }
+  .act { font-weight: 700; }
+  .act.Correct { color: var(--green); } .act.Ask { color: var(--amber); } .act.Leave { color: var(--grey); }
+  .empty { color: var(--grey); font-size: 13px; padding: 10px 6px; }
+  .log { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+  .log li { padding: 5px 0; border-bottom: 1px dashed #EEF0F3; }
+  .log li b { font-weight: 700; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .btn { border: 0; border-radius: 12px; padding: 9px 13px; font-size: 13.5px; font-weight: 700; cursor: pointer; background: var(--mist); color: var(--ink); }
+  .btn.dark { background: var(--ink); color: #fff; }
+  .btn:hover { filter: brightness(.95); }
+  .std-note { background: #FBEDEB; color: #7A2E24; border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; display: none; }
+  .tips { font-size: 12.5px; color: #4C5260; background: var(--mist); border-radius: 12px; padding: 10px 12px; margin-top: 14px; line-height: 1.5; }
+  .tips code { background: #fff; padding: 1px 5px; border-radius: 5px; }
+  .privacy { font-size: 12px; color: var(--green); font-weight: 700; margin-top: 12px; }
+
+  @media (max-width: 900px) {
+    body { flex-direction: column; overflow: auto; height: auto; align-items: center; }
+    .panel { width: 100%; max-width: 440px; max-height: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PHONE ============ -->
+<div class="phone">
+  <div class="screen" id="screen">
+    <div class="statusbar"><span id="clock">9:41</span><div class="notch"></div><span>5G ▮▮▮</span></div>
+    <div class="chat-head">
+      <div class="avatar">R</div>
+      <div><div class="name">Riya</div><div class="sub">online</div></div>
+    </div>
+    <div class="messages" id="messages"></div>
+    <div class="composer">
+      <div class="draft" id="draft"></div>
+      <button class="send" id="sendBtn" title="Send">➤</button>
+    </div>
+    <div class="kb" id="kb">
+      <div class="strip" id="strip"></div>
+      <div id="keys"></div>
+    </div>
+
+    <div class="sheet-backdrop" id="backdrop">
+      <div class="sheet">
+        <h3>Choose keyboard</h3>
+        <div class="opt" data-kb="standard"><div class="radio" id="r-standard"></div>
+          <div><div class="t">Standard Keyboard</div><div class="d">Fixed autocorrect rules · same for everyone</div></div></div>
+        <div class="opt" data-kb="tacit"><div class="radio" id="r-tacit"></div>
+          <div><div class="t">Tacit Keyboard</div><div class="d">Learns your mistakes · 100% on-device</div></div></div>
+        <div class="manage">Manage keyboards</div>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<!-- ============ PANEL ============ -->
+<div class="panel">
+  <div class="brand">
+    <div class="dots"><span style="background:var(--grey)"></span><span style="background:var(--amber)"></span><span style="background:var(--green)"></span></div>
+    <h1>Tacit</h1>
+  </div>
+  <div class="tag">Autocorrect that learns you · active keyboard: <span class="kbname" id="kbName">Tacit</span></div>
+
+  <div class="std-note" id="stdNote"><b>Standard Keyboard:</b> applies the same fixed corrections every time. It never learns from your undos — switch to Tacit with 🌐 to compare.</div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">Stage</div>
+      <div class="v" id="stageV">Observe</div>
+      <div class="stages"><span id="sg0"></span><span id="sg1"></span><span id="sg2"></span></div>
+      <div class="s" id="stageS">words seen 0 / 5</div>
+    </div>
+    <div class="card">
+      <div class="k">Confidence · last pair</div>
+      <div class="v" id="confV">—</div>
+      <div class="meter"><div id="confBar"></div><span class="tick" style="left:40%"></span><span class="tick" style="left:75%"></span></div>
+      <div class="s" id="confS">ask ≥ 40% · auto-correct ≥ 75%</div>
+    </div>
+    <div class="card">
+      <div class="k">Undos needed · Standard</div>
+      <div class="v" id="undoStd" style="color:var(--red)">0</div>
+      <div class="s">you had to fix its "fix"</div>
+    </div>
+    <div class="card">
+      <div class="k">Undos needed · Tacit</div>
+      <div class="v" id="undoTacit" style="color:var(--green)">0</div>
+      <div class="s">each undo lowers confidence</div>
+    </div>
+  </div>
+
+  <h2>What Tacit has learned</h2>
+  <table>
+    <thead><tr><th>Mistake</th><th>Correction</th><th class="num">✓</th><th class="num" title="Fixed by you">✎</th><th class="num">↶</th><th class="num">Kept</th><th class="num">Conf.</th><th>Action</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <h2>Activity</h2>
+  <ul class="log" id="log"></ul>
+
+  <div class="btns">
+    <button class="btn dark" id="seedBtn">Load demo history</button>
+    <button class="btn" id="resetBtn">Reset memory</button>
+    <button class="btn" id="switchBtn">🌐 Switch keyboard</button>
+  </div>
+
+  <div class="tips">
+    <b>Try:</b> <code>teh</code> · <code>recieve</code> · <code>Daksh</code> · <code>argv_v2</code> · <code>freind</code> · <code>becuase</code><br>
+    Type on the phone or your laptop keyboard. <b>Ctrl+Z</b> undoes the last auto-correction.<br>
+    <b>Fix it yourself:</b> click a misspelled word in the message (or use ← →), correct it, then click another word or type a space — Tacit learns your fix (✎).
+  </div>
+  <div class="privacy">🔒 Runs entirely in this page — nothing you type leaves the device.</div>
+</div>
+
+<script>
+/* ======================================================================
+   Tacit logic — ported from Tacit_prototype/tacitApp/tacit_memory.py
+   confidence = accepted / (accepted + undone + kept + 1) * 100
+   Leave if kept >= 2; Correct if confidence >= 75; else Ask
+   Stage: Observe until 5 words; Act once any pair >= 75%; else Suggest
+   ====================================================================== */
+const CONF_ASK_MIN = 40, CONF_CORRECT = 75, LEAVE_KEPT_MIN = 2, OBSERVE_UNTIL_EVENTS = 5;
+
+// Built-in table from tacit_engine.py, plus a few extra common slips for the demo.
+const BUILTIN = {
+  teh: "the", becuase: "because", freind: "friend", definately: "definitely", recieve: "receive",
+  wich: "which", seperate: "separate", adress: "address", daksh: "dash", argv_v2: "argv",
+  hte: "the", adn: "and", taht: "that", waht: "what", jsut: "just", thier: "their", untill: "until",
+  tommorow: "tomorrow", beleive: "believe", wierd: "weird", acheive: "achieve", occured: "occurred",
+  goverment: "government", recieved: "received", realy: "really", becasue: "because", yuo: "you",
+};
+const STAGE_COLOR = { Observe: "var(--grey)", Suggest: "var(--amber)", Act: "var(--green)" };
+const DELIMS = " .,!?:;";
+const STORE = "tacit_demo_memory_v1";
+// Learning from the user's own edits: a pause longer than this judges the edit (see commitEdit).
+const EDIT_IDLE_MS = 1500;
+const COMMON_WORDS = new Set(("a about after again all also am an and any are as at be because been before being both but by can " +
+  "come could day did do does done down each even every few find first for from get give go going good got great had has have he " +
+  "her here him his how i if in into is it its just know last let like little long look made make many may me more most much must " +
+  "my need never new next no not now of off oh ok okay old on once one only or other our out over people please really right said " +
+  "same say see she should show so some soon still such sure take tell than thank thanks that the their them then there these they " +
+  "thing think this those though time to today too try two up us use very want was way we well were what when where which while " +
+  "who why will with without work would yeah yes yet you your hi hey hello bye see soon expo demo coming reach text tomorrow " +
+  "tonight morning evening night meet meeting class college project team friend friends call later home ready late early fine " +
+  "nice cool where's sorry happy").split(" "));
+
+/* ---------------- memory ---------------- */
+let mem = { events: 0, data: {} };
+try { const s = localStorage.getItem(STORE); if (s) mem = JSON.parse(s); } catch (e) {}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(mem)); } catch (e) {} }
+function pair(m, c) { mem.data[m] = mem.data[m] || {}; return (mem.data[m][c] = mem.data[m][c] || { accepted: 0, undone: 0, kept: 0 }); }
+function confOf(s) { return 100 * s.accepted / (s.accepted + s.undone + s.kept + 1); }
+function actionOf(m, c) { const s = pair(m, c); if (s.kept >= LEAVE_KEPT_MIN) return "Leave"; if (confOf(s) >= CONF_CORRECT) return "Correct"; return "Ask"; }
+function stage() {
+  if (mem.events < OBSERVE_UNTIL_EVENTS) return "Observe";
+  for (const m in mem.data) for (const c in mem.data[m]) if (confOf(mem.data[m][c]) >= CONF_CORRECT) return "Act";
+  return "Suggest";
+}
+
+/* ---------------- state ---------------- */
+let kb = "tacit";
+try { kb = localStorage.getItem("tacit_demo_kb") || "tacit"; } catch (e) {}
+let draft = "", marks = [], strip = { type: "idle" }, lastFix = null, shift = false, layout = "abc";
+// caret: insertion point in draft. editSession: a finished word the user went back into ({ start, original }).
+let caret = 0, editSession = null, editTimer = null;
+let undos = { standard: 0, tacit: 0 }, lastPair = null, hotKey = null;
+const log = [];
+const messages = [
+  { who: "them", text: "Hey! Are you coming to the expo tomorrow?" },
+  { who: "them", text: "Text me when you reach 🙂" },
+];
+const replies = ["Nice! 😄", "Haha okay", "See you there!", "👍", "Wait, really?", "Sounds good!"];
+let replyIdx = 0;
+
+/* ---------------- engine ---------------- */
+function engine(word) { const key = word.toLowerCase(); return BUILTIN[key] || personalFix(key); }
+// Best correction the user taught Tacit by fixing the word themselves (ignores pairs marked Leave).
+function personalFix(key) {
+  const corrs = mem.data[key]; if (!corrs) return null;
+  let best = null, bestConf = -1;
+  for (const c in corrs) {
+    const s = corrs[c];
+    if (!(s.selfFixed > 0) || s.kept >= LEAVE_KEPT_MIN) continue;
+    if (confOf(s) > bestConf) { best = c; bestConf = confOf(s); }
+  }
+  return best;
+}
+function matchCase(word, corr) {
+  if (word.length > 1 && word === word.toUpperCase() && /[A-Z]/.test(word)) return corr.toUpperCase();
+  if (word[0] === word[0].toUpperCase() && /[A-Z]/.test(word[0])) return corr[0].toUpperCase() + corr.slice(1);
+  return corr;
+}
+function replaceAt(start, oldW, newW) {
+  if (draft.substr(start, oldW.length) !== oldW) return false;
+  draft = draft.slice(0, start) + newW + draft.slice(start + oldW.length);
+  if (caret >= start + oldW.length) caret += newW.length - oldW.length;
+  else if (caret > start) caret = start + newW.length;
+  marks = marks.filter(m => m.end <= start);
+  return true;
+}
+function mark(start, len, cls, ms) {
+  const m = { start, end: start + len, cls };
+  marks = marks.filter(x => x.end <= start || x.start >= start + len);
+  marks.push(m);
+  if (ms) setTimeout(() => { marks = marks.filter(x => x !== m); renderDraft(); }, ms);
+}
+function addLog(html) { log.unshift(html); if (log.length > 7) log.pop(); }
+
+/* ---------------- core: a word was completed ---------------- */
+function completeWord() {
+  const w = wordAround(draft.length - 1);
+  if (!w || w.end !== draft.length - 1) return;
+  const word = w.word, start = w.start;
+  if (strip.type === "ask") strip = { type: "idle" }; // unanswered question is simply ignored
+  // Standard keyboard uses fixed rules only; Tacit also uses fixes the user taught it.
+  const corrRaw = kb === "standard" ? (BUILTIN[word.toLowerCase()] || null) : engine(word);
+
+  if (kb === "standard") {
+    if (corrRaw) {
+      const corr = matchCase(word, corrRaw);
+      replaceAt(start, word, corr);
+      mark(start, corr.length, "w-std", 1600);
+      lastFix = { start, mistake: word, corr, kb: "standard" };
+      strip = { type: "undo", mistake: word, corr };
+      addLog(`Standard: auto-corrected <b>${esc(word)}</b> → <b>${esc(corr)}</b> (always, no learning)`);
+    } else strip = { type: "idle" };
+    return;
+  }
+
+  // ---- Tacit ----
+  mem.events++;
+  if (!corrRaw) { strip = { type: "idle" }; save(); return; }
+  const key = word.toLowerCase(), corr = matchCase(word, corrRaw);
+  const st = stage(), act = actionOf(key, corrRaw), s = pair(key, corrRaw);
+  lastPair = [key, corrRaw]; hotKey = key + "→" + corrRaw;
+
+  if (st === "Observe") {
+    mark(start, word.length, "w-observe", 1800);
+    strip = { type: "observe", word };
+    addLog(`Observe: noticed <b>${esc(word)}</b> — changing nothing yet`);
+  } else if (act === "Correct" && st === "Act") {
+    replaceAt(start, word, corr);
+    mark(start, corr.length, "w-fixed", 1800);
+    s.accepted++;
+    lastFix = { start, mistake: word, corr, kb: "tacit", key, corrRaw };
+    strip = { type: "undo", mistake: word, corr };
+    addLog(`Act: auto-corrected <b>${esc(word)}</b> → <b>${esc(corr)}</b> (${Math.round(confOf(s))}%)`);
+  } else if (act === "Leave") {
+    mark(start, word.length, "w-leave", 1800);
+    strip = { type: "leave", word };
+    addLog(`Leave: kept <b>${esc(word)}</b> as you like it`);
+  } else {
+    mark(start, word.length, "w-ask");
+    strip = { type: "ask", word, corr, start, key, corrRaw };
+    addLog(`Ask: “Did you mean <b>${esc(corr)}</b>?” (${Math.round(confOf(s))}%)`);
+  }
+  save();
+}
+
+function acceptAsk() {
+  const a = strip; if (a.type !== "ask") return;
+  if (replaceAt(a.start, a.word, a.corr)) mark(a.start, a.corr.length, "w-fixed", 1500);
+  const s = pair(a.key, a.corrRaw); s.accepted++;
+  lastFix = { start: a.start, mistake: a.word, corr: a.corr, kb: "tacit", key: a.key, corrRaw: a.corrRaw };
+  lastPair = [a.key, a.corrRaw]; hotKey = a.key + "→" + a.corrRaw;
+  strip = { type: "msg", text: `Learned: ${a.word} → ${a.corr}` };
+  addLog(`You accepted <b>${esc(a.corr)}</b> → confidence ${Math.round(confOf(s))}%`);
+  save(); renderAll();
+}
+function keepAsk() {
+  const a = strip; if (a.type !== "ask") return;
+  marks = marks.filter(m => m.start !== a.start);
+  mark(a.start, a.word.length, "w-leave", 1500);
+  const s = pair(a.key, a.corrRaw); s.kept++;
+  lastPair = [a.key, a.corrRaw]; hotKey = a.key + "→" + a.corrRaw;
+  strip = { type: "msg", text: s.kept >= LEAVE_KEPT_MIN ? `Got it — I'll leave “${a.word}” alone` : `Kept “${a.word}”` };
+  addLog(`You kept <b>${esc(a.word)}</b> (kept ${s.kept}×${s.kept >= LEAVE_KEPT_MIN ? " → now Leave" : ""})`);
+  save(); renderAll();
+}
+function undo() {
+  const f = lastFix;
+  if (!f) { flashToast("Nothing to undo"); return; }
+  if (!replaceAt(f.start, f.corr, f.mistake)) { lastFix = null; flashToast("Nothing to undo"); renderAll(); return; }
+  mark(f.start, f.mistake.length, "w-leave", 1500);
+  undos[f.kb]++;
+  if (f.kb === "tacit") {
+    const s = pair(f.key, f.corrRaw); s.undone++;
+    lastPair = [f.key, f.corrRaw]; hotKey = f.key + "→" + f.corrRaw;
+    addLog(`You undid <b>${esc(f.mistake)} → ${esc(f.corr)}</b> — confidence drops to ${Math.round(confOf(s))}%`);
+    strip = { type: "msg", text: `Undone — I'll be more careful with “${f.mistake}”` };
+    save();
+  } else {
+    addLog(`You undid Standard's <b>${esc(f.mistake)} → ${esc(f.corr)}</b> — it will do it again next time`);
+    strip = { type: "msg", text: `Undone (Standard doesn't remember this)` };
+  }
+  lastFix = null; renderAll();
+}
+
+/* ---------------- typing ---------------- */
+function typeChar(ch) {
+  if (shift && /[a-z]/.test(ch)) { ch = ch.toUpperCase(); shift = false; renderKeys(); }
+  if (caret < draft.length) { editAtCaret(ch); return; }
+  if (editSession) {
+    const w = wordAround(editSession.start);
+    if (isWordChar(ch) && w && w.end === draft.length) { editAtCaret(ch); return; } // still fixing the last word
+    commitEdit(true); // a space / punctuation after the edited word: the edit is finished
+  }
+  draft += ch; caret = draft.length;
+  if (DELIMS.includes(ch)) completeWord();
+  else if (strip.type === "undo" || strip.type === "msg" || strip.type === "observe" || strip.type === "leave") strip = { type: "idle" };
+  renderAll();
+}
+function backspace() {
+  if (!draft || caret === 0) return;
+  if (caret < draft.length || editSession) { editAtCaret(null); return; } // mid-text, or fixing the last word
+  draft = draft.slice(0, -1); caret = draft.length;
+  marks = marks.filter(m => m.end <= draft.length);
+  if (strip.type === "ask" && draft.length < strip.start + strip.word.length) strip = { type: "idle" };
+  renderAll();
+}
+function send() {
+  commitEdit(true);
+  if (draft && !DELIMS.includes(draft.slice(-1))) { draft += " "; caret = draft.length; completeWord(); }
+  const text = draft.trim();
+  draft = ""; caret = 0; marks = []; lastFix = null;
+  if (strip.type === "ask") strip = { type: "idle" };
+  if (text) {
+    messages.push({ who: "me", text });
+    renderMessages();
+    setTimeout(() => { messages.push({ who: "them", text: replies[replyIdx++ % replies.length] }); renderMessages(); }, 900);
+  }
+  renderAll();
+}
+
+/* ---------------- learning from the user's own edits ----------------
+   The user moves the cursor into a word (click or arrow keys) and fixes it.
+   - Leaving the word (click elsewhere, arrows, End, typing at the end, send) judges the edit:
+     a close spelling change (1–3 letters, by word length) is learned, e.g. mngo → mango.
+   - A pause also judges it, but only into a word Tacit already knows, so half-typed words are
+     never learned; if the user keeps editing afterwards, the early result is replaced.
+   - Changing a word Tacit corrected back to the original counts as an undo, not a new fix. */
+const isWordChar = c => /[A-Za-z0-9_']/.test(c || "");
+function wordAround(pos) {
+  let s = pos, e = pos;
+  while (s > 0 && isWordChar(draft[s - 1])) s--;
+  while (e < draft.length && isWordChar(draft[e])) e++;
+  while (s < e && draft[s] === "'") s++;      // apostrophes belong inside words (don't), not at the edges
+  while (e > s && draft[e - 1] === "'") e--;
+  return s < e ? { start: s, end: e, word: draft.slice(s, e) } : null;
+}
+function editDistance(a, b) { // Damerau–Levenshtein (adjacent swaps count as one edit)
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+const maxEdits = len => (len <= 3 ? 1 : len <= 7 ? 2 : 3);
+function isKnownWord(w) {
+  if (COMMON_WORDS.has(w) || Object.values(BUILTIN).includes(w)) return true;
+  return Object.values(mem.data).some(corrs => w in corrs);
+}
+// How an edit is recorded: "fix" (learn original → final), "undo" (reverted a correction), or null (ignore).
+function classifyEdit(original, final, requireKnown) {
+  const a = original.toLowerCase(), b = final.toLowerCase();
+  if (a === b || b.length < 2 || !/[a-z]/.test(b)) return null; // unchanged, capitalisation only, or not a word
+  if (mem.data[b] && mem.data[b][a]) return "undo";
+  if (isKnownWord(a)) return null; // one real word changed into another (hi → his) is a rewrite, not a typo fix
+  if (editDistance(a, b) > maxEdits(Math.max(a.length, b.length))) return null;
+  if (requireKnown && !isKnownWord(b)) return null;
+  return "fix";
+}
+// sign = +1 records the edit, -1 takes an earlier (pause-time) record back.
+function applyEdit(kind, original, final, sign) {
+  const a = original.toLowerCase(), b = final.toLowerCase();
+  const [m, c] = kind === "fix" ? [a, b] : [b, a];
+  const p = pair(m, c);
+  if (kind === "fix") { p.accepted += sign; p.selfFixed = (p.selfFixed || 0) + sign; }
+  else { p.undone += sign; undos.tacit += sign; }
+  if (sign < 0 && !p.accepted && !p.undone && !p.kept) { delete mem.data[m][c]; if (!Object.keys(mem.data[m]).length) delete mem.data[m]; }
+  lastPair = mem.data[m] && mem.data[m][c] ? [m, c] : null; hotKey = m + "→" + c;
+  return p;
+}
+function startEditIfInWord() {
+  if (editSession || caret >= draft.length) return;
+  const w = wordAround(caret);
+  if (w) editSession = { start: w.start, original: w.word, learned: null };
+}
+// final=true: the user left the word (or sent / switched), so the session ends either way.
+function commitEdit(final) {
+  clearTimeout(editTimer);
+  const s = editSession;
+  if (!s) return;
+  if (final) editSession = null;
+  if (kb !== "tacit") { editSession = null; return; }
+  const w = wordAround(s.start);
+  const word = w && w.start === s.start ? w.word : null;
+  if (s.learned && s.learned.final === word) return;   // this exact result was already recorded during a pause
+  if (s.learned) { applyEdit(s.learned.kind, s.original, s.learned.final, -1); s.learned = null; }
+  const kind = word ? classifyEdit(s.original, word, !final) : null;
+  if (!kind) {
+    if (final && word && word.toLowerCase() !== s.original.toLowerCase()) {
+      addLog(`Not learned: <b>${esc(s.original)} → ${esc(word)}</b> (too different to be a spelling fix)`);
+    }
+    save();
+    return;
+  }
+  const p = applyEdit(kind, s.original, word, +1);
+  if (!final) s.learned = { kind, final: word };
+  lastFix = null;
+  if (kind === "fix") {
+    mark(w.start, word.length, "w-fixed", 1800);
+    strip = { type: "msg", text: `Learned from your edit: ${s.original} → ${word}` };
+    addLog(`Learned from your edit: <b>${esc(s.original)} → ${esc(word)}</b> (${Math.round(confOf(p))}%)`);
+  } else {
+    mark(w.start, word.length, "w-leave", 1800);
+    strip = { type: "msg", text: `Undone — I'll be more careful with “${word}”` };
+    addLog(`You changed <b>${esc(s.original)}</b> back to <b>${esc(word)}</b> — confidence drops to ${Math.round(confOf(p))}%`);
+  }
+  save();
+}
+function moveCaret(pos) {
+  pos = Math.max(0, Math.min(draft.length, pos));
+  if (editSession) {
+    const w = wordAround(editSession.start);
+    if (!w || pos < w.start || pos > w.end) commitEdit(true);
+  }
+  caret = pos;
+  startEditIfInWord();
+  renderAll();
+}
+// Insert ch (or delete one char when ch is null) at the caret, in the middle of the text.
+function editAtCaret(ch) {
+  const at = ch === null ? caret - 1 : caret;
+  if (editSession) { // keep the edited word's start index in step with changes before it
+    if (ch === null && at < editSession.start) editSession.start--;
+    else if (ch !== null && (at < editSession.start || (at === editSession.start && !isWordChar(ch)))) editSession.start++;
+  }
+  if (ch === null) { draft = draft.slice(0, at) + draft.slice(caret); caret--; }
+  else { draft = draft.slice(0, caret) + ch + draft.slice(caret); caret++; }
+  marks = []; lastFix = null;
+  if (strip.type !== "ask") strip = { type: "idle" };
+  startEditIfInWord();
+  clearTimeout(editTimer);
+  if (editSession) editTimer = setTimeout(() => { commitEdit(false); renderAll(); }, EDIT_IDLE_MS);
+  renderAll();
+}
+
+/* ---------------- keyboard switcher ---------------- */
+function openPicker() { document.getElementById("backdrop").style.display = "block"; renderPicker(); }
+function closePicker() { document.getElementById("backdrop").style.display = "none"; }
+function setKb(k) {
+  if (k !== kb) {
+    kb = k; try { localStorage.setItem("tacit_demo_kb", kb); } catch (e) {}
+    clearTimeout(editTimer); editSession = null;
+    strip = { type: "idle" }; lastFix = null;
+    flashToast(k === "tacit" ? "Switched to Tacit Keyboard" : "Switched to Standard Keyboard");
+    addLog(`Switched to <b>${k === "tacit" ? "Tacit" : "Standard"} Keyboard</b>`);
+  }
+  closePicker(); renderAll();
+}
+let toastT;
+function flashToast(t) {
+  const el = document.getElementById("toast"); el.textContent = t; el.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove("show"), 1500);
+}
+
+/* ---------------- rendering ---------------- */
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function renderDraft() {
+  const el = document.getElementById("draft");
+  if (!draft) { el.innerHTML = '<span class="caret"></span><span class="ph">Message</span>'; return; }
+  // One class per character (highlight marks, plus the word being edited), grouped into runs;
+  // every character carries data-i so a click can place the caret.
+  const cls = new Array(draft.length).fill("");
+  for (const m of marks) if (m.end <= draft.length) for (let i = m.start; i < m.end; i++) cls[i] = m.cls;
+  const ew = editSession && wordAround(editSession.start);
+  if (ew) for (let i = ew.start; i < ew.end; i++) if (!cls[i]) cls[i] = "w-editing";
+  let html = "", open = "";
+  for (let i = 0; i <= draft.length; i++) {
+    const c = i < draft.length ? cls[i] : "";
+    if (c !== open) { if (open) html += "</span>"; if (c) html += `<span class="${c}">`; open = c; }
+    if (i === caret) html += '<span class="caret"></span>';
+    if (i < draft.length) html += `<span data-i="${i}">${esc(draft[i])}</span>`;
+  }
+  if (open) html += "</span>";
+  el.innerHTML = html;
+  if (caret === draft.length) el.scrollTop = el.scrollHeight;
+}
+function renderStrip() {
+  const el = document.getElementById("strip");
+  const st = stage();
+  let left = kb === "tacit"
+    ? `<span class="dot" style="background:${STAGE_COLOR[st]}"></span><span class="label">Tacit · ${st}</span>`
+    : `<span class="dot" style="background:#9AA0AA"></span><span class="label">Standard</span>`;
+  let mid = "";
+  const s = strip;
+  if (s.type === "ask") mid = `<button class="chip" data-act="keep">“${esc(s.word)}”</button><button class="chip primary" data-act="accept">${esc(s.corr)}</button>`;
+  else if (s.type === "undo") mid = `<span class="hint">${esc(s.mistake)} → ${esc(s.corr)}</span><button class="chip undo" data-act="undo">↶ Undo</button>`;
+  else if (s.type === "observe") mid = `<span class="hint">Learning… noticed “${esc(s.word)}”</span>`;
+  else if (s.type === "leave") mid = `<span class="hint">Left “${esc(s.word)}” as you type it</span>`;
+  else if (s.type === "msg") mid = `<span class="hint">${esc(s.text)}</span>`;
+  else mid = `<span class="hint" style="color:#7C838F">${kb === "tacit" ? "Learns from what you accept, keep and undo" : "Fixed rules for everyone"}</span>`;
+  el.innerHTML = left + `<div class="grow">${mid}</div>`;
+}
+const ROWS = {
+  abc: [["q","w","e","r","t","y","u","i","o","p"], ["a","s","d","f","g","h","j","k","l"], ["SHIFT","z","x","c","v","b","n","m","BKSP"]],
+  num: [["1","2","3","4","5","6","7","8","9","0"], ["-","_","/",":",";","(",")","&","@","\""], [".",",","?","!","'","BKSP"]],
+};
+function renderKeys() {
+  const el = document.getElementById("keys");
+  let html = "";
+  ROWS[layout].forEach((r, ri) => {
+    html += `<div class="row ${ri === 1 && layout === "abc" ? "r2" : ""}">`;
+    for (const k of r) {
+      if (k === "SHIFT") html += `<button class="key alt ${shift ? "on" : ""}" data-k="SHIFT">⇧</button>`;
+      else if (k === "BKSP") html += `<button class="key alt" data-k="BKSP">⌫</button>`;
+      else html += `<button class="key" data-k="${esc(k)}">${esc(shift && layout === "abc" ? k.toUpperCase() : k)}</button>`;
+    }
+    html += "</div>";
+  });
+  html += `<div class="row">
+    <button class="key alt" data-k="LAYOUT">${layout === "abc" ? "123" : "ABC"}</button>
+    <button class="key alt" data-k="GLOBE" title="Switch keyboard">🌐</button>
+    <button class="key wide" data-k=" ">${kb === "tacit" ? "Tacit" : "Standard"}</button>
+    <button class="key alt" data-k=".">.</button>
+    <button class="key send-key" data-k="SEND">send</button></div>`;
+  el.innerHTML = html;
+}
+function renderMessages() {
+  const el = document.getElementById("messages");
+  el.innerHTML = messages.map(m => `<div class="msg ${m.who}">${esc(m.text)}</div>`).join("");
+  el.scrollTop = el.scrollHeight;
+}
+function renderPicker() {
+  document.getElementById("r-standard").classList.toggle("sel", kb === "standard");
+  document.getElementById("r-tacit").classList.toggle("sel", kb === "tacit");
+}
+function renderPanel() {
+  const st = stage();
+  document.getElementById("kbName").textContent = kb === "tacit" ? "Tacit" : "Standard";
+  document.getElementById("stdNote").style.display = kb === "standard" ? "block" : "none";
+  const sv = document.getElementById("stageV"); sv.textContent = st; sv.style.color = STAGE_COLOR[st];
+  ["Observe", "Suggest", "Act"].forEach((n, i) => {
+    document.getElementById("sg" + i).style.background = ["Observe","Suggest","Act"].indexOf(st) >= i ? STAGE_COLOR[n] : "#DDE1E7";
+  });
+  document.getElementById("stageS").textContent = st === "Observe"
+    ? `words seen ${mem.events} / ${OBSERVE_UNTIL_EVENTS} — watching only`
+    : st === "Suggest" ? `words seen ${mem.events} · asking when unsure` : `words seen ${mem.events} · auto-correcting trusted pairs`;
+  const cv = document.getElementById("confV"), bar = document.getElementById("confBar"), cs = document.getElementById("confS");
+  if (lastPair) {
+    const [m, c] = lastPair, s = pair(m, c), v = confOf(s), a = actionOf(m, c);
+    cv.textContent = Math.round(v) + "%";
+    bar.style.width = v + "%";
+    bar.style.background = a === "Correct" ? "var(--green)" : a === "Leave" ? "var(--grey)" : "var(--amber)";
+    cs.textContent = `${m} → ${c} · ${a}`;
+  } else { cv.textContent = "—"; bar.style.width = "0"; cs.textContent = "ask ≥ 40% · auto-correct ≥ 75%"; }
+  document.getElementById("undoStd").textContent = undos.standard;
+  document.getElementById("undoTacit").textContent = undos.tacit;
+
+  const rows = [];
+  for (const m in mem.data) for (const c in mem.data[m]) rows.push([m, c, mem.data[m][c]]);
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = rows.length ? rows.map(([m, c, s]) => {
+    const a = actionOf(m, c);
+    return `<tr class="${hotKey === m + "→" + c ? "hot" : ""}"><td>${esc(m)}</td><td>${esc(c)}</td><td class="num">${s.accepted}</td><td class="num">${s.selfFixed || 0}</td><td class="num">${s.undone}</td><td class="num">${s.kept}</td><td class="num">${Math.round(confOf(s))}%</td><td class="act ${a}">${a}</td></tr>`;
+  }).join("") : `<tr><td colspan="8" class="empty">Nothing yet — type a common mistake like “teh ”.</td></tr>`;
+  document.getElementById("log").innerHTML = log.length ? log.map(l => `<li>${l}</li>`).join("") : `<li style="color:var(--grey)">Waiting for you to type…</li>`;
+}
+function renderAll() { renderDraft(); renderStrip(); renderKeys(); renderPanel(); }
+
+/* ---------------- events ---------------- */
+document.getElementById("keys").addEventListener("mousedown", e => e.preventDefault());
+document.getElementById("keys").addEventListener("click", e => {
+  const b = e.target.closest("[data-k]"); if (!b) return;
+  const k = b.dataset.k;
+  if (k === "SHIFT") { shift = !shift; renderKeys(); }
+  else if (k === "BKSP") backspace();
+  else if (k === "LAYOUT") { layout = layout === "abc" ? "num" : "abc"; renderKeys(); }
+  else if (k === "GLOBE") openPicker();
+  else if (k === "SEND") send();
+  else typeChar(k);
+});
+document.getElementById("strip").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  ({ accept: acceptAsk, keep: keepAsk, undo })[b.dataset.act]();
+});
+document.getElementById("sendBtn").addEventListener("click", send);
+// Click a character to put the caret before/after it; click empty space to go to the end.
+document.getElementById("draft").addEventListener("click", e => {
+  const ch = e.target.closest("[data-i]");
+  if (!ch) { moveCaret(draft.length); return; }
+  const r = ch.getBoundingClientRect();
+  moveCaret(+ch.dataset.i + (e.clientX > r.left + r.width / 2 ? 1 : 0));
+});
+document.querySelectorAll(".opt").forEach(o => o.addEventListener("click", () => setKb(o.dataset.kb)));
+document.getElementById("backdrop").addEventListener("click", e => { if (e.target.id === "backdrop") closePicker(); });
+document.getElementById("switchBtn").addEventListener("click", openPicker);
+document.getElementById("seedBtn").addEventListener("click", () => {
+  // Same seed as TacitApp.load_demo_history() in tacit_app.py
+  mem = { events: OBSERVE_UNTIL_EVENTS, data: {
+    teh: { the: { accepted: 3, undone: 0, kept: 0 } },
+    recieve: { receive: { accepted: 1, undone: 0, kept: 0 } },
+    daksh: { dash: { accepted: 0, undone: 0, kept: 2 } },
+    argv_v2: { argv: { accepted: 0, undone: 0, kept: 2 } },
+  } };
+  lastPair = ["teh", "the"]; hotKey = null; lastFix = null; strip = { type: "idle" };
+  save(); addLog("Loaded demo history — stage <b>" + stage() + "</b>"); flashToast("Demo history loaded"); renderAll();
+});
+document.getElementById("resetBtn").addEventListener("click", () => {
+  mem = { events: 0, data: {} }; lastPair = null; hotKey = null; lastFix = null; strip = { type: "idle" };
+  draft = ""; caret = 0; marks = []; undos = { standard: 0, tacit: 0 }; log.length = 0;
+  clearTimeout(editTimer); editSession = null;
+  save(); flashToast("Memory reset — back to Observe"); renderAll();
+});
+document.addEventListener("keydown", e => {
+  if (document.getElementById("backdrop").style.display === "block") { if (e.key === "Escape") closePicker(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const pressKey = k => { const b = document.querySelector(`#keys [data-k="${CSS.escape(k)}"]`); if (b) { b.classList.add("pressed"); setTimeout(() => b.classList.remove("pressed"), 110); } };
+  if (e.key === "ArrowLeft") { e.preventDefault(); moveCaret(caret - 1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); moveCaret(caret + 1); }
+  else if (e.key === "Home" || e.key === "ArrowUp") { e.preventDefault(); moveCaret(0); }
+  else if (e.key === "End" || e.key === "ArrowDown") { e.preventDefault(); moveCaret(draft.length); }
+  else if (e.key === "Backspace") { e.preventDefault(); backspace(); pressKey("BKSP"); }
+  else if (e.key === "Enter") { e.preventDefault(); send(); }
+  else if (e.key.length === 1) { e.preventDefault(); typeChar(e.key); pressKey(e.key.toLowerCase()); }
+});
+setInterval(() => { const d = new Date(); document.getElementById("clock").textContent = d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); }, 10000);
+
+renderMessages(); renderAll();
+</script>
+</body>
+</html>
