@@ -62,8 +62,6 @@ or motor difficulties.
 
 ## Team
 
-Guide: **Dr. Krishna Prasad K**
-
 | Name | USN |
 |---|---|
 | Aadhil Krishna | 4JK24CI001 |
