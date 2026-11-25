@@ -9,8 +9,8 @@ phone demo gained:
   * a Standard / Tacit mode switch, so the two can be compared side by side
   * an activity log and an "undos needed" count for each mode
 
-Behaviour lives in tacit_memory.py (learning), tacit_engine.py (candidates)
-and tacit_edits.py (judging a hand edit); this module is the interface only.
+Behaviour lives in memory.py (learning), engine.py (candidates)
+and edits.py (judging a hand edit); this module is the interface only.
 """
 
 import os
@@ -50,10 +50,10 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
-from tacit_memory import TacitMemory, CONF_CORRECT, LEAVE_KEPT_MIN, OBSERVE_UNTIL_EVENTS
-from tacit_engine import TacitEngine, BUILTIN_CORRECTIONS, is_dictionary_word
-from tacit_edits import classify_edit, word_at
-import tacit_theme as T
+from memory import TacitMemory, CONF_CORRECT, LEAVE_KEPT_MIN, OBSERVE_UNTIL_EVENTS
+from engine import TacitEngine, BUILTIN_CORRECTIONS, is_dictionary_word
+from edits import classify_edit, word_at
+import theme as T
 
 DELIMS = " .,!?:;"
 LOG_LIMIT = 40

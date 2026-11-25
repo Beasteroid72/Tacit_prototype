@@ -1,0 +1,10 @@
+# Learning data: written while the app runs, different for every user.
+tacit_memory.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+# PyInstaller scratch (the finished .exe is committed in dist/)
+build/
+*.spec

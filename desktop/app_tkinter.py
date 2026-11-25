@@ -1,5 +1,5 @@
 """
-tacit_app.py -- the Tkinter UI for "Tacit: Autocorrect That Learns You".
+app_tkinter.py -- the Tkinter UI for "Tacit: Autocorrect That Learns You".
 
 This is the redesigned UI layer: a calm, clean, professional look with
 suggestions shown as speech bubbles directly inside the editor text.
@@ -99,7 +99,7 @@ ACTION_LEAVE = "Leave"
 
 
 # ==================== SECTION 2: MEMORY (JSON) ====================
-# Note: this is only the UI layer.  The memory itself is in tacit_memory.py
+# Note: this is only the UI layer.  The memory itself is in memory.py
 # (class TacitMemory) -- this app reads/writes "tacit_memory.json" through it.
 # What the UI uses: memory.data, memory.stage(), memory.action(),
 # memory.confidence(), memory.pair(), memory.record_accept/undo/kept,
@@ -107,7 +107,7 @@ ACTION_LEAVE = "Leave"
 
 
 # ==================== SECTION 3: LEARNING LAYER (decides Correct / Ask / Leave) ====================
-# Note: this is only the UI layer.  The actual logic is in tacit_memory.py
+# Note: this is only the UI layer.  The actual logic is in memory.py
 # (class TacitMemory).  The rules it applies:
 #   - action == "Leave"  if the word was "kept" at least twice (LEAVE_KEPT_MIN)
 #   - action == "Correct" if confidence >= CONF_CORRECT (75%)
@@ -118,7 +118,7 @@ ACTION_LEAVE = "Leave"
 
 
 # ==================== SECTION 4: SUGGESTION ENGINE (proposes corrections) ====================
-# Note: this is only the UI layer.  The engine is in tacit_engine.py
+# Note: this is only the UI layer.  The engine is in engine.py
 # (class TacitEngine, method check(word, context) -> (correction, engine)).
 # The UI calls it in a background thread (same as before) and shows whatever
 # comes back as a speech bubble; the engine fallback chain (Ollama ->
@@ -180,7 +180,7 @@ MARK_TAGS = (TAG_ASK, TAG_CORRECT, TAG_LEAVE, TAG_OBSERVE)
 
 # ==================== SECTION 11: START-UP ====================
 # main() opens the window (TacitApp) and starts the event loop.
-# The entry point (tacit_demo.py) is unchanged; it calls this module's main().
+# The entry point (run_tkinter.py) is unchanged; it calls this module's main().
 
 
 import re
@@ -188,9 +188,9 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from tacit_memory import TacitMemory
-from tacit_engine import TacitEngine, is_dictionary_word
-from tacit_edits import classify_edit, word_at
+from memory import TacitMemory
+from engine import TacitEngine, is_dictionary_word
+from edits import classify_edit, word_at
 
 
 class TacitApp:

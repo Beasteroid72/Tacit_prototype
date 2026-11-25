@@ -1,4 +1,4 @@
-"""Engine: the local Ollama LLM is the detector for every word; pyspellchecker and the built-in dictionary are fallbacks when Ollama is unavailable or times out.  Learning/undo behaviour is in tacit_memory.py; this module only proposes corrections."""
+"""Engine: the local Ollama LLM is the detector for every word; pyspellchecker and the built-in dictionary are fallbacks when Ollama is unavailable or times out.  Learning/undo behaviour is in memory.py; this module only proposes corrections."""
 
 import re
 
@@ -50,7 +50,7 @@ def is_dictionary_word(word):
             return bool(spell.known([w]))
         except Exception:
             pass
-    from tacit_edits import COMMON_WORDS
+    from edits import COMMON_WORDS
     return w in COMMON_WORDS
 
 

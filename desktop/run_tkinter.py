@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import tkinter as tk
 
-from tacit_app import TacitApp
+from app_tkinter import TacitApp
 
 OLLAMA_TIMEOUT = 1.0
 
