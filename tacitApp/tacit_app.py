@@ -67,6 +67,10 @@ BUBBLE_FADE_MS = 4000    # CORRECT bubbles disappear after this time
                           # (Tk has no true fade -- see honesty note in REPORT)
 HIGHLIGHT_MS = 400        # brief soft highlight after an automatic correction
 
+# Learning from the user's own edits: a pause this long judges the edit early
+# (see TacitApp._commit_edit).
+EDIT_IDLE_MS = 1500
+
 # ---- button emphasis ----
 BTN_EMPHASIS_FONT = FONT_BOLD
 
@@ -76,9 +80,11 @@ EDITOR_HINT = "Start typing..."
 
 # ---- learned table ----
 TABLE_TITLE = "What Tacit has learned (memory: tacit_memory.json)"
-TABLE_COLS = ["Mistake", "Correction", "Accepted", "Undone", "Confidence %", "Action"]
-TABLE_WIDTHS = {"Mistake": 112, "Correction": 120, "Accepted": 76,
-                "Undone": 76, "Confidence %": 92, "Action": 76}
+TABLE_COLS = ["Mistake", "Correction", "Accepted", "Fixed by you", "Undone",
+              "Confidence %", "Action"]
+TABLE_WIDTHS = {"Mistake": 104, "Correction": 110, "Accepted": 72,
+                "Fixed by you": 88, "Undone": 70, "Confidence %": 86,
+                "Action": 70}
 TABLE_STRIPE = "#f9f9f9"  # subtle row striping
 EMPTY_STATE = "Nothing learned yet. Start typing."
 
@@ -183,7 +189,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from tacit_memory import TacitMemory
-from tacit_engine import TacitEngine
+from tacit_engine import TacitEngine, is_dictionary_word
+from tacit_edits import classify_edit, word_at
 
 
 class TacitApp:
@@ -202,6 +209,11 @@ class TacitApp:
 
         self.stage_labels = {}    # stage name -> label (SECTION 6/SECTION 5)
         self.bubble = None        # the speech-bubble canvas (SECTION 8)
+
+        # Learning from the user's own edits: the word they went back into
+        # ({"original": str, "learned": {...} or None}), plus the idle timer.
+        self.edit_session = None
+        self.edit_timer = None
 
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.build_ui()
@@ -258,6 +270,9 @@ class TacitApp:
         self.editor.focus()
         self.editor.bind("<KeyRelease>", self.on_key_release)
         self.editor.bind("<Control-z>", lambda e: self.undo_last_fix())
+        # Clicking into a finished word starts an edit the same way the arrow
+        # keys do (handled in on_key_release).
+        self.editor.bind("<ButtonRelease-1>", lambda e: self._on_cursor_moved())
 
         # Placeholder hint when the editor is empty
         self.placeholder = tk.Label(card1, text=EDITOR_HINT, background=CARD,
@@ -414,8 +429,9 @@ class TacitApp:
                               "Leave": "action_leave"}.get(action, "")
                 tags = [action_tag] + (["stripe"] if i % 2 else [])
                 rid = tree.insert("", "end", values=(
-                    mistake, corr, s["accepted"], s["undone"],
-                    "{:.0f}%".format(conf), action), tags=tuple(tags))
+                    mistake, corr, s["accepted"], s.get("self_fixed", 0),
+                    s["undone"], "{:.0f}%".format(conf), action),
+                    tags=tuple(tags))
         self._update_empty_state()
 
     # ---------------- editor text helpers ----------------
@@ -435,6 +451,139 @@ class TacitApp:
                 return "{}.{}".format(line_no, offset - pos)
             pos += len(line) + 1
         return "end"
+
+    def index_to_offset(self, index):
+        """Map a Tk index string to a 0-based offset in editor_text()."""
+        line, col = (int(p) for p in self.editor.index(index).split("."))
+        lines = self.editor_text().split("\n")
+        return sum(len(l) + 1 for l in lines[:line - 1]) + col
+
+    # ------- learning from the user's own edits -------
+
+    EDIT_MARK = "tacit_edit_start"   # Tk mark: follows the word as text shifts
+
+    def _is_known_word(self, word):
+        """True when Tacit recognises the word (dictionary or something learned)."""
+        w = word.lower()
+        if is_dictionary_word(w):
+            return True
+        return any(w in corrs for corrs in self.memory.data.values())
+
+    def _cancel_edit_timer(self):
+        if self.edit_timer is not None:
+            try:
+                self.root.after_cancel(self.edit_timer)
+            except Exception:
+                pass
+            self.edit_timer = None
+
+    def _edit_word_now(self):
+        """The word currently sitting at the edit mark, or None."""
+        try:
+            off = self.index_to_offset(self.EDIT_MARK)
+        except Exception:
+            return None
+        w = word_at(self.editor_text(), off)
+        # The mark sits at the word's start; if it no longer does, the words
+        # were merged or split and the edit is no longer safe to read.
+        return w[2] if w and w[0] == off else None
+
+    def _on_cursor_moved(self, typing=False):
+        """Start an edit when the caret enters a finished word, end it on leaving."""
+        try:
+            off = self.index_to_offset("insert")
+        except Exception:
+            return
+        text = self.editor_text()
+
+        if self.edit_session is not None:
+            try:
+                start = self.index_to_offset(self.EDIT_MARK)
+            except Exception:
+                start = None
+            w = word_at(text, start) if start is not None else None
+            if not w or off < w[0] or off > w[1]:
+                self._commit_edit(final=True)       # caret left the word
+            elif typing:
+                self._cancel_edit_timer()           # still editing: restart the pause
+                self.edit_timer = self.root.after(
+                    EDIT_IDLE_MS, lambda: self._commit_edit(final=False))
+
+        if self.edit_session is None and off < len(text):
+            # Only words with text after them: typing at the end is not an edit.
+            w = word_at(text, off)
+            if w:
+                self.editor.mark_set(self.EDIT_MARK, self.offset_to_index(w[0]))
+                self.editor.mark_gravity(self.EDIT_MARK, "left")
+                self.edit_session = {"original": w[2], "learned": None}
+
+    def _apply_self_edit(self, kind, original, final, sign):
+        """Record (sign +1) or take back (sign -1) one hand edit."""
+        a, b = original.lower(), final.lower()
+        mistake, corr = (a, b) if kind == "fix" else (b, a)
+        s = self.memory.pair(mistake, corr)
+        if kind == "fix":
+            s["accepted"] += sign
+            s["self_fixed"] = s.get("self_fixed", 0) + sign
+        else:
+            s["undone"] += sign
+        if sign < 0:
+            self.memory.forget_pair(mistake, corr)
+        self.memory.save()
+        return mistake, corr
+
+    def _commit_edit(self, final=True):
+        """Judge the word the user edited by hand, once they leave it or pause."""
+        self._cancel_edit_timer()
+        sess = self.edit_session
+        if sess is None:
+            return
+        if final:
+            self.edit_session = None
+        word = self._edit_word_now()
+
+        learned = sess.get("learned")
+        if learned is not None:
+            if learned["final"] == word:
+                return          # this exact result was already recorded on a pause
+            # The user kept editing: take the earlier record back first.
+            self._apply_self_edit(learned["kind"], sess["original"],
+                                  learned["final"], -1)
+            sess["learned"] = None
+
+        kind = None
+        if word:
+            kind = classify_edit(sess["original"], word, self._is_known_word,
+                                 self.memory.has_pair, require_known=not final)
+        if kind is None:
+            if final and word and word.lower() != sess["original"].lower():
+                self.note_set('Not learned: "{}" -> "{}" '
+                              '(too different to be a spelling fix).'
+                              .format(sess["original"], word))
+            self.refresh_table()
+            return
+
+        mistake, corr = self._apply_self_edit(kind, sess["original"], word, +1)
+        if not final:
+            sess["learned"] = {"kind": kind, "final": word}
+        self.last_fix = None
+        conf = self.memory.confidence(mistake, corr)
+
+        rng = self.word_range_last(word)
+        if rng:
+            self.flash(rng[0], rng[1],
+                       BUB_GREEN if kind == "fix" else OBSERVE_MARK)
+        if kind == "fix":
+            self.note_set('Learned from your edit: "{}" -> "{}". '
+                          'Confidence {:.0f}%.'
+                          .format(sess["original"], word, conf))
+        else:
+            self.note_set('You changed "{}" back to "{}". '
+                          'Confidence lowered to {:.0f}%.'
+                          .format(sess["original"], word, conf))
+        self.set_stage()
+        self.refresh_table()
+        self.set_confidence(conf)
 
     def word_range_last(self, word):
         """(start_index, end_index) of the last occurrence of `word`, or None."""
@@ -464,6 +613,7 @@ class TacitApp:
         ch = event.char
         if ch and ch in " .,!?:":
             self.handle_completed_word()
+        self._on_cursor_moved(typing=bool(ch))
 
     def _on_root_click(self, event):
         # Clicking elsewhere dismisses the bubble, unless the click is on the
@@ -486,6 +636,8 @@ class TacitApp:
     # ---------------- core behaviour ----------------
 
     def handle_completed_word(self):
+        # A space or punctuation ends any word the user was editing by hand.
+        self._commit_edit(final=True)
         try:
             idx = self.editor.index("insert")
         except tk.TclError:
@@ -550,6 +702,12 @@ class TacitApp:
             pass
 
     def _apply_word(self, word, corr, engine, rng):
+        if not corr:
+            # Nothing from the dictionaries: fall back to what the user taught
+            # Tacit by fixing this word themselves.
+            learned = self.memory.personal_fix(word)
+            if learned:
+                corr, engine = learned, "your own edits"
         self.update_engine_label(engine, corr)
         stage = self.memory.stage()
 
@@ -783,6 +941,8 @@ class TacitApp:
             "daksh": {"dash": {"accepted": 0, "undone": 0, "kept": 2}},
             "argv_v2": {"argv": {"accepted": 0, "undone": 0, "kept": 2}},
         })
+        self._cancel_edit_timer()
+        self.edit_session = None
         self.last_fix = None
         self.refresh_table()
         self.set_stage()
@@ -794,6 +954,8 @@ class TacitApp:
     def reset(self):
         # Visually quiet button: clear memory and start again from Observe
         self.memory.clear()
+        self._cancel_edit_timer()
+        self.edit_session = None
         self.pending_words = []
         self.ollama_busy = False
         self.editor.delete("1.0", "end")
@@ -808,6 +970,10 @@ class TacitApp:
     # ---------------- misc ----------------
 
     def on_close(self):
+        try:
+            self._commit_edit(final=True)
+        except Exception:
+            pass
         try:
             if self.memory is not None:
                 self.memory.save()

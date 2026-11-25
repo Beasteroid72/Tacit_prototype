@@ -35,6 +35,25 @@ BUILTIN_CORRECTIONS = {
 _cache = {}
 
 
+def is_dictionary_word(word):
+    """Best-effort check that a word is a real word, for judging hand edits.
+
+    Uses pyspellchecker when it is installed, and otherwise the built-in
+    corrections plus a small common-word list, so the check still works on a
+    bare install.
+    """
+    w = word.lower()
+    if w in BUILTIN_CORRECTIONS.values():
+        return True
+    if spell is not None:
+        try:
+            return bool(spell.known([w]))
+        except Exception:
+            pass
+    from tacit_edits import COMMON_WORDS
+    return w in COMMON_WORDS
+
+
 def _should_check(word):
     """Skip very short words, numbers and capitalised names."""
     if len(word) < 3:
