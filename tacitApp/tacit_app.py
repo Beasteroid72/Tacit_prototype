@@ -227,7 +227,8 @@ class TacitApp:
         header = tk.Frame(self.root, background=BG, padx=PAD, pady=PAD)
         header.pack(side="top", fill="x")
 
-        tk.Label(header, text="Tacit", font=FONT_TITLE, background=BG).pack(side="left")
+        tk.Label(header, text="Tacit", font=FONT_TITLE, background=BG,
+                 fg=TEXT).pack(side="left")
 
         self.stage_frame = tk.Frame(header, background=BG)
         self.stage_frame.pack(side="left", padx=(24, 0))
@@ -240,7 +241,8 @@ class TacitApp:
         self.conf_canvas = tk.Canvas(header, width=CONF_W, height=CONF_H,
                                      background=CONF_TRACK, highlightthickness=0)
         self.conf_canvas.pack(side="left", padx=(16, 0))
-        self.conf_label = tk.Label(header, text="0%", font=FONT_SMALL, background=BG)
+        self.conf_label = tk.Label(header, text="0%", font=FONT_SMALL,
+                                   background=BG, fg=TEXT)
         self.conf_label.pack(side="left", padx=(4, 0))
 
         self.engine_label = tk.Label(header, text="Engine: none yet",
@@ -261,11 +263,16 @@ class TacitApp:
         card2.pack(side="left", fill="both", expand=True)
 
         # ---------- Card 1: editor ----------
-        tk.Label(card1, text=EDITOR_TITLE, font=FONT_TITLE, background=CARD).pack(
-            anchor="w", pady=2)
+        tk.Label(card1, text=EDITOR_TITLE, font=FONT_TITLE, background=CARD,
+                 fg=TEXT).pack(anchor="w", pady=2)
 
+        # The colours are all set explicitly: on a dark system theme Tk would
+        # otherwise draw white text (and a white caret) on these light cards.
         self.editor = tk.Text(card1, font=FONT_EDITOR, wrap="word", undo=True,
-                              background=CARD, padx=6, pady=6, highlightthickness=0)
+                              background=CARD, foreground=TEXT,
+                              insertbackground=TEXT,
+                              selectbackground=BUB_BLUE, selectforeground=TEXT,
+                              padx=6, pady=6, highlightthickness=0)
         self.editor.pack(fill="both", expand=True)
         self.editor.focus()
         self.editor.bind("<KeyRelease>", self.on_key_release)
@@ -310,11 +317,26 @@ class TacitApp:
         editor_note.pack(anchor="w", padx=6, pady=0)
 
         # ---------- Card 2: learned table ----------
-        tk.Label(card2, text=TABLE_TITLE, font=FONT_TITLE, background=CARD).pack(
-            anchor="w", pady=2)
+        tk.Label(card2, text=TABLE_TITLE, font=FONT_TITLE, background=CARD,
+                 fg=TEXT).pack(anchor="w", pady=2)
+
+        # ttk follows the system theme, so the table needs its colours spelled
+        # out too, or dark mode gives white text on these light rows.
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure("Tacit.Treeview", background=CARD, fieldbackground=CARD,
+                        foreground=TEXT, rowheight=22)
+        style.configure("Tacit.Treeview.Heading", background=BG, foreground=TEXT,
+                        font=FONT_SMALL)
+        style.map("Tacit.Treeview", background=[("selected", BUB_BLUE)],
+                  foreground=[("selected", TEXT)])
 
         self.learned_tree = ttk.Treeview(card2, columns=TABLE_COLS,
-                                         show="headings", height=10)
+                                         show="headings", height=10,
+                                         style="Tacit.Treeview")
         for c in TABLE_COLS:
             self.learned_tree.heading(c, text=c)
             self.learned_tree.column(c, width=TABLE_WIDTHS[c],
