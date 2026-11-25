@@ -51,7 +51,8 @@ from PyQt6.QtWidgets import (
 )
 
 from memory import TacitMemory, CONF_CORRECT, LEAVE_KEPT_MIN, OBSERVE_UNTIL_EVENTS
-from engine import TacitEngine, BUILTIN_CORRECTIONS, is_dictionary_word
+from engine import (TacitEngine, BUILTIN_CORRECTIONS, is_dictionary_word,
+                    ensure_ollama_server)
 from edits import classify_edit, word_at
 import theme as T
 
@@ -827,6 +828,9 @@ class TacitWindow(QMainWindow):
 
 
 def main():
+    # Wake the local LLM before the window opens, so the first word typed can
+    # already reach it.  Harmless when Ollama is not installed.
+    ensure_ollama_server()
     app = QApplication(sys.argv)
     app.setStyleSheet(T.QSS)
     win = TacitWindow()

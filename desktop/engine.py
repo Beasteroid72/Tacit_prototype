@@ -1,6 +1,9 @@
 """Engine: the local Ollama LLM is the detector for every word; pyspellchecker and the built-in dictionary are fallbacks when Ollama is unavailable or times out.  Learning/undo behaviour is in memory.py; this module only proposes corrections."""
 
+import os
 import re
+import shutil
+import subprocess
 
 try:
     import requests
@@ -17,6 +20,65 @@ except Exception:
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_MODEL = "llama3.2:3b"
 OLLAMA_TIMEOUT_SEC = 2.0   # short timeout so typing never lags
+OLLAMA_PROBE_TIMEOUT_SEC = 1.0   # just asking whether the server is up
+
+# Where Ollama puts itself when it is not already on PATH.
+_OLLAMA_PATHS = (
+    r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",          # Windows
+    "/usr/local/bin/ollama",                                 # macOS installer
+    "/opt/homebrew/bin/ollama",                              # macOS, Apple silicon
+    "/Applications/Ollama.app/Contents/Resources/ollama",    # macOS app bundle
+    "/usr/bin/ollama",                                       # Linux
+)
+
+
+def ollama_running():
+    """True if the Ollama server answers right now."""
+    if requests is None:
+        return False
+    try:
+        return requests.get(OLLAMA_URL + "/api/version",
+                            timeout=OLLAMA_PROBE_TIMEOUT_SEC).ok
+    except Exception:
+        return False
+
+
+def find_ollama():
+    """The ollama executable, from PATH or the usual install locations."""
+    exe = shutil.which("ollama")
+    if exe:
+        return exe
+    for path in _OLLAMA_PATHS:
+        path = os.path.expandvars(path)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def ensure_ollama_server():
+    """Start the Ollama server if it is not up yet, so the LLM is ready.
+
+    Best effort and deliberately silent.  The engine falls back to
+    pyspellchecker and the built-in table whenever Ollama is missing or still
+    starting, so failing here costs suggestion quality and never startup.
+    Returns True if the server was already running or has been launched.
+    """
+    if ollama_running():
+        return True
+    exe = find_ollama()
+    if exe is None:
+        return False
+    try:
+        subprocess.Popen(
+            [exe, "serve"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return True
+    except Exception:
+        return False
+
 
 BUILTIN_CORRECTIONS = {
     "teh": "the",

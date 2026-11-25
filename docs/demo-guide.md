@@ -39,7 +39,8 @@ twice is never touched again. Autocorrect has no memory of your having rejected 
 3. **Run it** — `python desktop/run.py`.
 4. **Optional, for real LLM suggestions** — install
    [Ollama](https://ollama.com/download), then `ollama pull llama3.2:3b`. The app looks
-   for it at `http://localhost:11434` (`OLLAMA_URL` in `desktop/engine.py`).
+   for it at `http://localhost:11434` (`OLLAMA_URL` in `desktop/engine.py`) and starts
+   the server itself if it isn't running, so there is nothing to launch by hand.
 
 On Windows you can skip all of this and double-click `dist/tacit_demo.exe`. To rebuild
 that executable after changing the code: `powershell -File tools\build.ps1`.

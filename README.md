@@ -59,7 +59,8 @@ python desktop/run.py
 Windows users can instead double-click `dist/tacit_demo.exe` — no Python needed.
 
 Optional, for real LLM suggestions: install [Ollama](https://ollama.com/download) and run
-`ollama pull llama3.2:3b` once.
+`ollama pull llama3.2:3b` once. The app starts the Ollama server itself if it isn't already
+running, and carries on without it if it isn't installed.
 
 The **Keyboard** button switches between Standard and Tacit, the way a phone switches
 keyboards — the quickest way to see the difference. `docs/demo-guide.md` has a short
