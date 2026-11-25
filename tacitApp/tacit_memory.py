@@ -56,6 +56,51 @@ class TacitMemory:
         self.pair(mistake, corr)["kept"] += 1
         self.save()
 
+    def record_self_fix(self, mistake, corr):
+        """The user corrected this word by hand; counts as an accept.
+
+        `self_fixed` is kept separately so the table can show how many of the
+        accepts came from the user's own edits rather than from a prompt.
+        """
+        s = self.pair(mistake, corr)
+        s["accepted"] += 1
+        s["self_fixed"] = s.get("self_fixed", 0) + 1
+        self.save()
+
+    def has_pair(self, mistake, corr):
+        """True when this pair is already known (without creating it)."""
+        return corr in self.data.get(mistake, {})
+
+    def personal_fix(self, word):
+        """The correction the user taught by fixing this word themselves.
+
+        Lets Tacit propose fixes no dictionary knows.  Pairs the user has kept
+        on purpose are skipped; the most confident of the rest wins.
+        """
+        corrs = self.data.get(word.lower())
+        if not corrs:
+            return None
+        best, best_conf = None, -1.0
+        for corr, s in corrs.items():
+            if not s.get("self_fixed") or s.get("kept", 0) >= LEAVE_KEPT_MIN:
+                continue
+            conf = self.stats_to_conf(s)
+            if conf > best_conf:
+                best, best_conf = corr, conf
+        return best
+
+    def forget_pair(self, mistake, corr):
+        """Drop a pair once every count is back to zero."""
+        corrs = self.data.get(mistake)
+        if not corrs or corr not in corrs:
+            return
+        s = corrs[corr]
+        if any(s.get(k, 0) for k in ("accepted", "undone", "kept", "self_fixed")):
+            return
+        del corrs[corr]
+        if not corrs:
+            del self.data[mistake]
+
     def stats_to_conf(self, s):
         return 100.0 * s["accepted"] / (s["accepted"] + s["undone"] + s["kept"] + 1)
 
